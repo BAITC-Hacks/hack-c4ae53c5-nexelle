@@ -36,3 +36,15 @@ GEMINI.md
 .agents/
 .gemini/
 .antigravity/
+
+# Python development tools and caches
+.tools/
+.venv/
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.ruff_cache/
+
+# Local verification artifacts
+.tmp/
+.pnpm-store/

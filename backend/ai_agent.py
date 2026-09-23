@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import os
-from typing import Any
-
 from .models import AIExplanation, Recommendation, RecommendationResponse
 
 
-def explain(response: RecommendationResponse, recommendation: Recommendation | None = None) -> AIExplanation:
+def explain(
+    response: RecommendationResponse, recommendation: Recommendation | None = None
+) -> AIExplanation:
     """Return a stable explanation; an API key is optional by design.
 
     The optional OpenAI integration is intentionally left behind the application
@@ -16,7 +15,6 @@ def explain(response: RecommendationResponse, recommendation: Recommendation | N
     safe for local demos and tests.
     """
 
-    _ = os.getenv("OPENAI_API_KEY")  # Presence is observed without embedding secrets.
     selected = recommendation or (response.recommendations[0] if response.recommendations else None)
     if selected is None:
         return AIExplanation(
@@ -25,6 +23,16 @@ def explain(response: RecommendationResponse, recommendation: Recommendation | N
             next_steps=[],
         )
     factors = selected.factors
+    if factors.get("fallback"):
+        return AIExplanation(
+            summary=f"Следующий шаг: {selected.title}.",
+            why="Требования цели выполнены. Мероприятие поддерживает навыки и дальнейшее развитие.",
+            next_steps=[
+                "Проверьте условия участия.",
+                "Пройдите мероприятие.",
+                "Обновите прогресс.",
+            ],
+        )
     history = "История активности учтена при ранжировании."
     if factors.get("completed_before"):
         history = "Это событие уже встречалось в истории, поэтому его приоритет снижен."

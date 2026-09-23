@@ -3,7 +3,32 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+from datetime import date
 from typing import Any
+
+
+@dataclass(frozen=True)
+class EventSkillGain:
+    skill_id: str
+    gain: int
+    max_level: int
+
+
+@dataclass(frozen=True)
+class Event:
+    event_id: str
+    title: str
+    description: str
+    type: str
+    format: str
+    duration_hours: float
+    mandatory: bool
+    target_roles: tuple[str, ...]
+    target_grades: tuple[str, ...]
+    develops_skills: tuple[EventSkillGain, ...]
+    prerequisites: dict[str, int]
+    upcoming_sessions: tuple[date, ...]
+    prerequisite_events: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

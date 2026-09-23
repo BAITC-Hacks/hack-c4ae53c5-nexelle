@@ -1,148 +1,188 @@
-"""Deterministic, explainable recommendation ranking over the project dataset."""
+"""Offline reference implementation. The running application uses Go exclusively."""
 
 from __future__ import annotations
 
-import re
-from collections.abc import Iterable
+from datetime import date
 from typing import Any
 
 from .data_loader import DataBundle
-from .models import Recommendation, RecommendationResponse, SkillGap
+from .models import Event, Recommendation, RecommendationResponse, SkillGap
+
+ABSOLUTE_MAX_SKILL_LEVEL = 5
+GRADES = ("Junior", "Middle", "Senior", "Lead")
+
+
+def effective_gain(current: int, gain: int, maximum: int) -> int:
+    if current >= maximum:
+        return 0
+    return max(0, min(current + gain, maximum, ABSOLUTE_MAX_SKILL_LEVEL) - current)
 
 
 class RecommendationEngine:
-    def __init__(self, data: DataBundle):
+    def __init__(self, data: DataBundle) -> None:
         self.data = data
 
-    def recommend(self, employee_id: str, limit: int = 3) -> RecommendationResponse:
-        employee = _find_by_id(self.data.employees, employee_id)
+    def recommend(
+        self, employee_id: str, *, cutoff_date: date, limit: int = 3
+    ) -> RecommendationResponse:
+        if type(limit) is not int or not 1 <= limit <= 3:
+            raise ValueError("limit must be between 1 and 3")
+        employee = next((e for e in self.data.employees if e["employee_id"] == employee_id), None)
         if employee is None:
-            raise ValueError(f"Employee not found: {employee_id}")
-        current_level = _text(employee, "grade", "level", "current_grade", default="Unknown")
-        target_level = _target_level(employee, current_level)
-        gaps = self._skill_gaps(employee, current_level, target_level)
-        history = [row for row in self.data.activity_history if _row_employee_id(row) == employee_id]
-        recommendations = self._rank_events(employee, gaps, history, current_level, target_level)
-        return RecommendationResponse(employee_id, current_level, target_level, gaps, recommendations[: max(0, limit)])
-
-    def _skill_gaps(self, employee: dict[str, Any], current_level: str, target_level: str) -> list[SkillGap]:
-        current_skills = _skill_map(employee)
-        result: list[SkillGap] = []
-        for definition in self.data.skills:
-            skill_id = _id(definition, "skill_id", "id", "code", fallback=_text(definition, "name", "title", default="unknown"))
-            skill_name = _text(definition, "name", "title", default=skill_id)
-            current = _number(current_skills.get(skill_id), default=_number(current_skills.get(skill_name), default=0))
-            if not current and skill_id in current_skills:
-                current = _number(current_skills[skill_id])
-            required = _required_level(definition, target_level, current_level)
-            gap = max(0.0, required - current)
-            if gap > 0:
-                result.append(SkillGap(skill_id, skill_name, current, required, gap, _bool(definition, "critical", "is_critical")))
-        return sorted(result, key=lambda item: (-item.critical, -item.gap, item.skill_id))
-
-    def _rank_events(self, employee: dict[str, Any], gaps: list[SkillGap], history: list[dict[str, Any]], current_level: str, target_level: str) -> list[Recommendation]:
-        by_key = {gap.skill_id.lower(): gap for gap in gaps} | {gap.skill_name.lower(): gap for gap in gaps}
-        completed = {_event_key(row) for row in history if _is_completed(row)}
+            raise ValueError(f"Unknown employee {employee_id}")
+        grade = employee["grade"]
+        goal = employee.get("career_goal")
+        target_role = goal["target_role"] if goal else employee["role"]
+        target_grade = goal["target_grade"] if goal else GRADES[min(GRADES.index(grade) + 1, 3)]
+        profile = next(
+            (
+                p
+                for p in self.data.role_profiles
+                if p["role"] == target_role and p["grade"] == target_grade
+            ),
+            None,
+        )
+        if profile is None:
+            raise ValueError("Target role profile is missing")
+        events = {e.event_id: e for e in self.data.events}
+        history = sorted(
+            (
+                h
+                for h in self.data.activity_history
+                if h["employee_id"] == employee_id and date.fromisoformat(h["date"]) <= cutoff_date
+            ),
+            key=lambda h: (h["date"], h["record_id"]),
+        )
+        skills = dict(employee["skills"])
+        review = date.fromisoformat(employee["last_review_date"])
+        for activity in history:
+            if activity["status"] == "completed" and date.fromisoformat(activity["date"]) > review:
+                for development in events[activity["event_id"]].develops_skills:
+                    current = skills.get(development.skill_id, 0)
+                    skills[development.skill_id] = current + effective_gain(
+                        current, development.gain, development.max_level
+                    )
+        definitions = {s["skill_id"]: s for s in self.data.skills}
+        all_gaps = {
+            skill_id: SkillGap(
+                skill_id,
+                definitions[skill_id]["name"],
+                skills.get(skill_id, 0),
+                required,
+                max(0, required - skills.get(skill_id, 0)),
+                skill_id in profile["critical_skills"],
+            )
+            for skill_id, required in profile["required_skills"].items()
+        }
+        gaps = sorted(
+            (g for g in all_gaps.values() if g.gap > 0),
+            key=lambda g: (-g.critical, -g.gap, g.skill_id),
+        )
+        completed = {h["event_id"] for h in history if h["status"] == "completed"}
         ranked: list[Recommendation] = []
         for event in self.data.events:
-            event_id = _id(event, "event_id", "activity_id", "id", fallback="")
-            skill_ref = _text(event, "skill_id", "skill", "skill_code", "skill_name", default="").lower()
-            gap = by_key.get(skill_ref)
-            if gap is None:
-                gap = next((item for key, item in by_key.items() if skill_ref and (skill_ref in key or key in skill_ref)), None)
-            if gap is None:
+            if not self._eligible(event, employee, skills, completed, cutoff_date):
                 continue
-            event_key = event_id.lower()
-            completed_before = event_key in completed
-            coverage = min(gap.gap, _number(event.get("gain", event.get("level_gain", 1)), default=1))
-            role_match = _event_matches_role(event, employee)
-            score = round((coverage / gap.gap) * 50 + (15 if gap.critical else 0) + (15 if role_match else 0) + (8 if not completed_before else -12) + _availability_score(event), 4)
-            title = _text(event, "title", "name", "activity", default=event_id or gap.skill_name)
-            reason = f"Закрывает {coverage:g} из {gap.gap:g} gap по навыку {gap.skill_name}."
-            ranked.append(Recommendation(event_id, title, reason, gap.skill_name, gap.current_level, gap.required_level, coverage, score, {"critical": gap.critical, "role_match": role_match, "completed_before": completed_before, "current_level": current_level, "target_level": target_level}))
-        return sorted(ranked, key=lambda item: (-item.priority, item.event_id, item.title))
+            evidence: list[dict[str, Any]] = []
+            for development in event.develops_skills:
+                gap = all_gaps.get(development.skill_id)
+                if gap is None or gap.gap <= 0:
+                    continue
+                gain = min(
+                    gap.gap,
+                    effective_gain(int(gap.current_level), development.gain, development.max_level),
+                )
+                if gain > 0:
+                    evidence.append(
+                        {"skill_id": gap.skill_id, "gain": gain, "critical": gap.critical}
+                    )
+            reasons: list[str] = []
+            if not gaps:
+                developed = {g.skill_id for g in event.develops_skills}
+                if any(
+                    s in profile["critical_skills"] and definitions[s]["type"] == "hard"
+                    for s in developed
+                ):
+                    reasons.append("critical_hard_maintenance")
+                if any(definitions[s]["type"] == "soft" for s in developed):
+                    reasons.append("soft_skill_development")
+                if event.type == "mentoring":
+                    reasons.append("mentoring")
+            if not evidence and not reasons:
+                continue
+            relevant = [h for h in history if events[h["event_id"]].format == event.format]
+            negatives = sum(h["status"] in {"no_show", "dropped", "declined"} for h in relevant)
+            positives = sum(h["status"] == "completed" for h in relevant)
+            gap_score = sum(e["gain"] * (2.5 if e["critical"] else 1) for e in evidence)
+            goal_score = (
+                5
+                if target_role in event.target_roles and target_grade in event.target_grades
+                else 2
+            )
+            next_session = min(
+                (s for s in event.upcoming_sessions if s > cutoff_date), default=None
+            )
+            days = (next_session - cutoff_date).days if next_session else 0
+            feasibility = 3 if event.format == "self_paced" or days <= 7 else 2 if days <= 30 else 1
+            score = gap_score + goal_score + positives * 2 - negatives * 5 + feasibility
+            primary = next(
+                (g for g in gaps if any(e["skill_id"] == g.skill_id for e in evidence)), None
+            )
+            ranked.append(
+                Recommendation(
+                    event.event_id,
+                    event.title,
+                    "Поддержание и развитие навыков."
+                    if reasons
+                    else "Сокращает разрыв до целевого грейда.",
+                    primary.skill_name if primary else "",
+                    primary.current_level if primary else 0,
+                    primary.required_level if primary else 0,
+                    sum(e["gain"] for e in evidence),
+                    float(score),
+                    {
+                        "critical": any(e["critical"] for e in evidence),
+                        "gap_score": gap_score,
+                        "fallback": bool(reasons),
+                        "fallback_reasons": reasons,
+                        "skills": evidence,
+                        "penalty": negatives * 5,
+                        "cutoff_date": cutoff_date.isoformat(),
+                    },
+                )
+            )
+        ranked.sort(
+            key=lambda r: (
+                -bool(r.factors["critical"]),
+                -r.priority,
+                -r.factors["gap_score"],
+                r.event_id,
+            )
+        )
+        return RecommendationResponse(employee_id, grade, target_grade, gaps, ranked[:limit])
 
-
-def _find_by_id(rows: Iterable[dict[str, Any]], wanted: str) -> dict[str, Any] | None:
-    return next((row for row in rows if _id(row, "employee_id", "id", "user_id", fallback="") == wanted), None)
-
-
-def _skill_map(employee: dict[str, Any]) -> dict[str, Any]:
-    values = employee.get("skills", employee.get("skill_levels", {}))
-    if isinstance(values, dict):
-        return values
-    if isinstance(values, list):
-        result = {}
-        for row in values:
-            if isinstance(row, dict):
-                key = _id(row, "skill_id", "id", "code", fallback=_text(row, "name", default=""))
-                result[key] = row.get("current_level", row.get("level", row.get("value", 0)))
-        return result
-    return {}
-
-
-def _required_level(definition: dict[str, Any], target: str, current: str) -> float:
-    for key in ("required_level", "target_level", "next_level"):
-        if key in definition:
-            return _number(definition[key])
-    levels = definition.get("levels", definition.get("requirements", {}))
-    if isinstance(levels, dict):
-        for key in (target, current, "default"):
-            if key in levels:
-                value = levels[key]
-                return _number(value.get("required", value.get("level", value)) if isinstance(value, dict) else value)
-    return 0
-
-
-def _target_level(employee: dict[str, Any], current: str) -> str:
-    goal = employee.get("career_goal", employee.get("target_role", employee.get("career_target")))
-    if isinstance(goal, dict):
-        return _text(goal, "grade", "level", "title", default=current)
-    return str(goal or current)
-
-
-def _event_matches_role(event: dict[str, Any], employee: dict[str, Any]) -> bool:
-    role = _text(employee, "role", "job_title", default="").lower()
-    allowed = event.get("roles", event.get("target_roles", event.get("role")))
-    if not allowed or not role:
-        return False
-    values = allowed if isinstance(allowed, list) else [allowed]
-    return any(str(value).lower() in role or role in str(value).lower() for value in values)
-
-
-def _availability_score(event: dict[str, Any]) -> float:
-    status = _text(event, "status", "availability", default="").lower()
-    return 5 if status in {"available", "open", "active", "available now"} else 0
-
-
-def _row_employee_id(row: dict[str, Any]) -> str:
-    return _id(row, "employee_id", "user_id", "employee", fallback="")
-
-
-def _event_key(row: dict[str, Any]) -> str:
-    return _id(row, "event_id", "activity_id", "id", fallback="").lower()
-
-
-def _is_completed(row: dict[str, Any]) -> bool:
-    return _text(row, "status", "outcome", default="").lower() in {"completed", "complete", "done", "finished"}
-
-
-def _id(row: dict[str, Any], *keys: str, fallback: str) -> str:
-    return str(next((row[key] for key in keys if row.get(key) not in (None, "")), fallback))
-
-
-def _text(row: dict[str, Any], *keys: str, default: str) -> str:
-    return str(next((row[key] for key in keys if row.get(key) not in (None, "")), default))
-
-
-def _number(value: Any, default: float = 0) -> float:
-    if isinstance(value, bool):
-        return float(value)
-    if isinstance(value, (int, float)):
-        return float(value)
-    match = re.search(r"-?\d+(?:\.\d+)?", str(value or ""))
-    return float(match.group()) if match else default
-
-
-def _bool(row: dict[str, Any], *keys: str) -> bool:
-    return any(row.get(key) is True or str(row.get(key, "")).lower() in {"true", "yes", "1"} for key in keys)
+    @staticmethod
+    def _eligible(
+        event: Event,
+        employee: dict[str, Any],
+        skills: dict[str, int],
+        completed: set[str],
+        cutoff: date,
+    ) -> bool:
+        if event.mandatory or (event.event_id in completed and event.event_id != "EV_036"):
+            return False
+        audiences = [(employee["role"], employee["grade"])]
+        if employee.get("career_goal"):
+            goal = employee["career_goal"]
+            audiences.append((goal["target_role"], goal["target_grade"]))
+        if not any(
+            role in event.target_roles and grade in event.target_grades for role, grade in audiences
+        ):
+            return False
+        if any(skills.get(skill, 0) < level for skill, level in event.prerequisites.items()):
+            return False
+        if not set(event.prerequisite_events).issubset(completed):
+            return False
+        return event.format == "self_paced" or any(
+            session > cutoff for session in event.upcoming_sessions
+        )
