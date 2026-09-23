@@ -39,6 +39,15 @@ go run ./web/server.go
 
 Откройте <http://localhost:4173>. Mock API включён по умолчанию и хранит completion в `localStorage`; кнопка «Сбросить демо» восстанавливает начальное состояние. Режим HTTP включается параметром `?mock=false` после подключения актуальных путей API в `web/src/api.js`.
 
+Профиль доступен HR либо самому сотруднику. Для demo-запроса сотрудника передайте оба заголовка:
+
+```powershell
+Invoke-WebRequest http://localhost:8080/api/v1/employees/E0001/profile -Headers @{
+  'X-Demo-Role' = 'employee'
+  'X-Employee-ID' = 'E0001'
+}
+```
+
 ## Проверка
 
 ```powershell
