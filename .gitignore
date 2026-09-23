@@ -36,3 +36,6 @@ GEMINI.md
 .agents/
 .gemini/
 .antigravity/
+
+tmp/
+
