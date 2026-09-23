@@ -22,6 +22,8 @@ type DatasetStore interface {
 	GetDataset(ctx context.Context) (domain.Dataset, error)
 	ReplaceDataset(ctx context.Context, dataset domain.Dataset) error
 	GetEmployee(ctx context.Context, employeeID string) (domain.Employee, error)
+	ListEmployees(ctx context.Context) ([]domain.Employee, error)
+	ListEvents(ctx context.Context) ([]domain.Event, error)
 	ListEmployeeActivities(ctx context.Context, employeeID string) ([]domain.ActivityRecord, error)
 	AddCompletedActivity(ctx context.Context, employeeID, eventID string, completedAt time.Time) (domain.ActivityRecord, error)
 }
@@ -76,6 +78,42 @@ func (s *MemoryStore) GetEmployee(ctx context.Context, employeeID string) (domai
 	return copyEmployee(employee), nil
 }
 
+// ListEmployees returns copies so API callers cannot mutate the in-memory dataset.
+func (s *MemoryStore) ListEmployees(ctx context.Context) ([]domain.Employee, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.dataset == nil {
+		return nil, ErrDatasetNotLoaded
+	}
+	result := make([]domain.Employee, 0, len(s.dataset.Employees))
+	for _, employee := range s.dataset.Employees {
+		result = append(result, copyEmployee(employee))
+	}
+	return result, nil
+}
+
+// ListEvents returns copies of every event in the imported catalog.
+func (s *MemoryStore) ListEvents(ctx context.Context) ([]domain.Event, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.dataset == nil {
+		return nil, ErrDatasetNotLoaded
+	}
+	result := make([]domain.Event, 0, len(s.dataset.Events))
+	for _, event := range s.dataset.Events {
+		result = append(result, copyEvent(event))
+	}
+	return result, nil
+}
+
 func (s *MemoryStore) ListEmployeeActivities(ctx context.Context, employeeID string) ([]domain.ActivityRecord, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -108,6 +146,19 @@ func copyEmployee(employee domain.Employee) domain.Employee {
 	if employee.CareerGoal != nil {
 		careerGoal := *employee.CareerGoal
 		result.CareerGoal = &careerGoal
+	}
+	return result
+}
+
+func copyEvent(event domain.Event) domain.Event {
+	result := event
+	result.TargetRoles = append([]string(nil), event.TargetRoles...)
+	result.TargetGrades = append([]string(nil), event.TargetGrades...)
+	result.DevelopsSkills = append([]domain.EventSkillGain(nil), event.DevelopsSkills...)
+	result.UpcomingSessions = append([]string(nil), event.UpcomingSessions...)
+	result.Prerequisites = make(map[string]int, len(event.Prerequisites))
+	for skillID, level := range event.Prerequisites {
+		result.Prerequisites[skillID] = level
 	}
 	return result
 }

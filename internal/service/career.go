@@ -139,8 +139,8 @@ func (s *CareerService) GetHRAnalytics(ctx context.Context) (domain.HRAnalytics,
 		}
 		return topSkillGaps[i].SkillID < topSkillGaps[j].SkillID
 	})
-	if len(topSkillGaps) > 10 {
-		topSkillGaps = topSkillGaps[:10]
+	if len(topSkillGaps) > 5 {
+		topSkillGaps = topSkillGaps[:5]
 	}
 
 	participation := participationByEvent(dataset)

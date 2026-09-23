@@ -64,15 +64,50 @@ func LoadDir(ctx context.Context, dir string) (domain.Dataset, ValidationReport,
 		return domain.Dataset{}, ValidationReport{}, err
 	}
 
-	skills, err := readJSON[skillsDocument](filepath.Join(dir, "skills.json"))
+	skillsFile, err := os.Open(filepath.Join(dir, "skills.json"))
 	if err != nil {
 		return domain.Dataset{}, ValidationReport{}, fmt.Errorf("read skills.json: %w", err)
 	}
-	events, err := readJSON[eventsDocument](filepath.Join(dir, "events.json"))
+	defer skillsFile.Close()
+	eventsFile, err := os.Open(filepath.Join(dir, "events.json"))
 	if err != nil {
 		return domain.Dataset{}, ValidationReport{}, fmt.Errorf("read events.json: %w", err)
 	}
-	employees, err := readJSON[employeesDocument](filepath.Join(dir, "employees.json"))
+	defer eventsFile.Close()
+	employeesFile, err := os.Open(filepath.Join(dir, "employees.json"))
+	if err != nil {
+		return domain.Dataset{}, ValidationReport{}, fmt.Errorf("read employees.json: %w", err)
+	}
+	defer employeesFile.Close()
+	historyFile, err := os.Open(filepath.Join(dir, "activity_history.csv"))
+	if err != nil {
+		return domain.Dataset{}, ValidationReport{}, fmt.Errorf("read activity_history.csv: %w", err)
+	}
+	defer historyFile.Close()
+
+	return LoadFiles(ctx, skillsFile, eventsFile, employeesFile, historyFile)
+}
+
+// LoadFiles validates a complete dataset supplied by the HTTP import endpoint or
+// another source. The readers must contain skills.json, events.json,
+// employees.json and activity_history.csv in that order.
+func LoadFiles(ctx context.Context, skillsReader, eventsReader, employeesReader, historyReader io.Reader) (domain.Dataset, ValidationReport, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.Dataset{}, ValidationReport{}, err
+	}
+	if skillsReader == nil || eventsReader == nil || employeesReader == nil || historyReader == nil {
+		return domain.Dataset{}, ValidationReport{}, fmt.Errorf("all four dataset files are required")
+	}
+
+	skills, err := readJSON[skillsDocument](skillsReader)
+	if err != nil {
+		return domain.Dataset{}, ValidationReport{}, fmt.Errorf("read skills.json: %w", err)
+	}
+	events, err := readJSON[eventsDocument](eventsReader)
+	if err != nil {
+		return domain.Dataset{}, ValidationReport{}, fmt.Errorf("read events.json: %w", err)
+	}
+	employees, err := readJSON[employeesDocument](employeesReader)
 	if err != nil {
 		return domain.Dataset{}, ValidationReport{}, fmt.Errorf("read employees.json: %w", err)
 	}
@@ -85,7 +120,7 @@ func LoadDir(ctx context.Context, dir string) (domain.Dataset, ValidationReport,
 	loadRoleProfiles(&dataset, skills.RoleProfiles, &report)
 	loadEvents(&dataset, events.Events, &report)
 	loadEmployees(&dataset, employees.Employees, &report)
-	loadActivityHistory(ctx, &dataset, filepath.Join(dir, "activity_history.csv"), &report)
+	loadActivityHistory(ctx, &dataset, historyReader, &report)
 	validateManagers(dataset, &report)
 
 	if !report.IsValid() {
@@ -94,13 +129,10 @@ func LoadDir(ctx context.Context, dir string) (domain.Dataset, ValidationReport,
 	return dataset, report, nil
 }
 
-func readJSON[T any](path string) (T, error) {
+func readJSON[T any](reader io.Reader) (T, error) {
 	var result T
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return result, err
-	}
-	if err := json.Unmarshal(content, &result); err != nil {
+	decoder := json.NewDecoder(reader)
+	if err := decoder.Decode(&result); err != nil {
 		return result, err
 	}
 	return result, nil
@@ -243,15 +275,8 @@ func validateManagers(dataset domain.Dataset, report *ValidationReport) {
 	}
 }
 
-func loadActivityHistory(ctx context.Context, dataset *domain.Dataset, path string, report *ValidationReport) {
-	file, err := os.Open(path)
-	if err != nil {
-		report.add("activity_history.csv", 0, "", "open file: "+err.Error())
-		return
-	}
-	defer file.Close()
-
-	reader := csv.NewReader(file)
+func loadActivityHistory(ctx context.Context, dataset *domain.Dataset, input io.Reader, report *ValidationReport) {
+	reader := csv.NewReader(input)
 	reader.TrimLeadingSpace = true
 	headers, err := reader.Read()
 	if err != nil {
