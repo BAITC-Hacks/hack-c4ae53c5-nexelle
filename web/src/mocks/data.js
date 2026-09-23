@@ -48,7 +48,7 @@ export const recommendationsDto = [
   {
     event_id: 'event-sql-lab',
     title: 'Advanced SQL: Window Functions Lab',
-    format: 'Workshop',
+    event_type: 'Workshop',
     score_breakdown: {
       grade: 24,
       skill_gaps: 30,
@@ -57,10 +57,8 @@ export const recommendationsDto = [
       availability: 12,
     },
     skill_gaps: ['SQL'],
-    eligibility: {
-      status: 'eligible',
-      prerequisites: ['Базовый SQL', 'Ноутбук с доступом к учебной среде'],
-    },
+    prerequisites: ['Базовый SQL', 'Ноутбук с доступом к учебной среде'],
+    eligibility: { status: 'eligible' },
     history_signals: ['Продолжает тему SQL после базового курса'],
     expected_gain: [{ skill: 'SQL', level_delta: 1 }],
     availability: {
@@ -81,7 +79,7 @@ export const recommendationsDto = [
   {
     event_id: 'event-experiment',
     title: 'Designing Trustworthy A/B Tests',
-    format: 'Course',
+    event_type: 'Course',
     score_breakdown: {
       grade: 22,
       skill_gaps: 25,
@@ -90,10 +88,8 @@ export const recommendationsDto = [
       availability: 12,
     },
     skill_gaps: ['Experiment design', 'Product analytics'],
-    eligibility: {
-      status: 'eligible',
-      prerequisites: ['Знание продуктовых метрик'],
-    },
+    prerequisites: ['Знание продуктовых метрик'],
+    eligibility: { status: 'eligible' },
     history_signals: ['Закрыл основы продуктовой аналитики'],
     expected_gain: [
       { skill: 'Experiment design', level_delta: 1 },
@@ -117,7 +113,7 @@ export const recommendationsDto = [
   {
     event_id: 'event-mentor',
     title: 'Analytics Leadership Mentoring Circle',
-    format: 'Mentoring',
+    event_type: 'Mentoring',
     score_breakdown: {
       grade: 20,
       skill_gaps: 18,
@@ -126,10 +122,8 @@ export const recommendationsDto = [
       availability: 16,
     },
     skill_gaps: ['Stakeholder management'],
-    eligibility: {
-      status: 'eligible',
-      prerequisites: ['Не менее одного завершённого аналитического проекта'],
-    },
+    prerequisites: ['Не менее одного завершённого аналитического проекта'],
+    eligibility: { status: 'eligible' },
     history_signals: ['Уже завершены два профильных формата развития'],
     expected_gain: [{ skill: 'Stakeholder management', level_delta: 1 }],
     availability: {

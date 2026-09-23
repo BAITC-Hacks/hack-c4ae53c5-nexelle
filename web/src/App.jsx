@@ -5,7 +5,9 @@ import { createTranslator } from './i18n/translations'
 import EmployeeDashboard from './pages/EmployeeDashboard'
 import CareerPath from './pages/CareerPath'
 import HRDashboard from './pages/HRDashboard'
-import { completeActivity, getEmployeeProfile, getHRDashboard, getRecommendations } from './services/mockApi'
+import { completeActivity, getEmployeeHistory, getEmployeeProfile, getHRDashboard, getRecommendations } from './services/api'
+
+const demoEmployeeId = 'emp-003'
 
 function LoadingState() {
   return <div className="loading-state"><span className="loading-orb" /><p>Career Quest</p></div>
@@ -29,13 +31,26 @@ export default function App() {
   const [toast, setToast] = useState('')
   const t = createTranslator(locale)
 
+  const fetchEmployeeData = async () => {
+    const [profile, history, nextRecommendations] = await Promise.all([
+      getEmployeeProfile(demoEmployeeId),
+      getEmployeeHistory(demoEmployeeId),
+      getRecommendations(demoEmployeeId),
+    ])
+
+    return {
+      employee: { ...profile, history },
+      recommendations: nextRecommendations,
+    }
+  }
+
   const loadEmployee = async () => {
     setLoading(true)
     setError(false)
     try {
-      const [profile, nextRecommendations] = await Promise.all([getEmployeeProfile(), getRecommendations()])
-      setEmployee(profile)
-      setRecommendations(nextRecommendations)
+      const nextData = await fetchEmployeeData()
+      setEmployee(nextData.employee)
+      setRecommendations(nextData.recommendations)
     } catch {
       setError(true)
     } finally {
@@ -74,11 +89,11 @@ export default function App() {
     setCompletingId(eventId)
     setToast('')
     try {
-      const result = await completeActivity(eventId)
-      setEmployee(result.employee)
+      await completeActivity(demoEmployeeId, eventId)
       setRefreshing(true)
-      const nextRecommendations = await getRecommendations()
-      setRecommendations(nextRecommendations)
+      const nextData = await fetchEmployeeData()
+      setEmployee(nextData.employee)
+      setRecommendations(nextData.recommendations)
       setToast(t('completedSuccess'))
       window.setTimeout(() => setToast(''), 4500)
     } catch {

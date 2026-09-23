@@ -10,6 +10,8 @@ const formatKey = {
 export default function RecommendationCard({ recommendation, t, onComplete, completing }) {
   const availabilityKey = recommendation.availability.status === 'limited' ? 'limited' : 'available'
   const scoreEntries = Object.entries(recommendation.score_breakdown)
+  const eventType = recommendation.event_type ?? recommendation.format
+  const prerequisites = recommendation.prerequisites ?? recommendation.eligibility?.prerequisites ?? []
 
   return (
     <article className="recommendation-card">
@@ -17,8 +19,8 @@ export default function RecommendationCard({ recommendation, t, onComplete, comp
       <div className="recommendation-card__header">
         <div>
           <div className="eyebrow-row">
-            <span className="format-chip">{t(formatKey[recommendation.format] ?? 'event')}</span>
-            <span className="eligible-chip">● {t('eligible')}</span>
+            <span className="format-chip">{t(formatKey[eventType] ?? 'event')}</span>
+            <span className="eligible-chip">● {t(recommendation.eligibility.status)}</span>
           </div>
           <h3>{recommendation.title}</h3>
         </div>
@@ -45,7 +47,7 @@ export default function RecommendationCard({ recommendation, t, onComplete, comp
 
       <div className="prerequisites">
         <span className="inline-label">{t('prerequisites')}</span>
-        <span>{recommendation.eligibility.prerequisites.join(' · ')}</span>
+        <span>{prerequisites.join(' · ')}</span>
       </div>
 
       <section className="why-panel">
