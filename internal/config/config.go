@@ -24,7 +24,7 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
-	snapshotDate, err := dateFromEnv("SNAPSHOT_DATE", defaultSnapshotDate)
+	snapshotDate, err := fixedSnapshotDate()
 	if err != nil {
 		return Config{}, err
 	}
@@ -54,15 +54,13 @@ func intFromEnv(name string, fallback int) (int, error) {
 	return result, nil
 }
 
-func dateFromEnv(name, fallback string) (time.Time, error) {
-	value := strings.TrimSpace(os.Getenv(name))
-	if value == "" {
-		value = fallback
+func fixedSnapshotDate() (time.Time, error) {
+	if configured := strings.TrimSpace(os.Getenv("SNAPSHOT_DATE")); configured != "" && configured != defaultSnapshotDate {
+		return time.Time{}, fmt.Errorf("SNAPSHOT_DATE must be %s for the Career Quest dataset", defaultSnapshotDate)
 	}
-
-	result, err := time.Parse(time.DateOnly, value)
+	result, err := time.Parse(time.DateOnly, defaultSnapshotDate)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("%s must have format YYYY-MM-DD: %w", name, err)
+		return time.Time{}, fmt.Errorf("parse fixed snapshot date: %w", err)
 	}
 	return result, nil
 }

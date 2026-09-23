@@ -142,6 +142,14 @@ func TestCollectionRoutesRespectRolesAndExposeCatalog(t *testing.T) {
 		t.Fatalf("event catalog: status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
 
+	request = httptest.NewRequest(http.MethodGet, "/api/hr/analytics", nil)
+	request.Header.Set("X-Demo-Role", "hr")
+	recorder = httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"employeeCount":2`) {
+		t.Fatalf("HR analytics: status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+
 	request = httptest.NewRequest(http.MethodGet, "/employees/E0002/history", nil)
 	request.Header.Set("X-Demo-Role", "employee")
 	request.Header.Set("X-Employee-ID", "E0001")

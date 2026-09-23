@@ -49,7 +49,7 @@ func (s *CareerService) GetProfile(ctx context.Context, employeeID string) (doma
 	}
 	return domain.ProfileResponse{
 		Employee:        employeeDTO(employee),
-		Activities:      activityDTOs(activities),
+		Activities:      activityDTOs(dataset, activities),
 		Progress:        careerProgress,
 		Recommendations: recommendations,
 	}, nil
@@ -131,7 +131,11 @@ func (s *CareerService) GetHRAnalytics(ctx context.Context) (domain.HRAnalytics,
 
 	topSkillGaps := make([]domain.SkillGapSummary, 0, len(gapCounts))
 	for skillID, employeeCount := range gapCounts {
-		topSkillGaps = append(topSkillGaps, domain.SkillGapSummary{SkillID: skillID, EmployeeCount: employeeCount})
+		skillName := skillID
+		if skill, exists := dataset.Skills[skillID]; exists && skill.Name != "" {
+			skillName = skill.Name
+		}
+		topSkillGaps = append(topSkillGaps, domain.SkillGapSummary{SkillID: skillID, SkillName: skillName, EmployeeCount: employeeCount})
 	}
 	sort.Slice(topSkillGaps, func(i, j int) bool {
 		if topSkillGaps[i].EmployeeCount != topSkillGaps[j].EmployeeCount {
@@ -145,6 +149,7 @@ func (s *CareerService) GetHRAnalytics(ctx context.Context) (domain.HRAnalytics,
 
 	participation := participationByEvent(dataset)
 	return domain.HRAnalytics{
+		EmployeeCount:                  len(dataset.Employees),
 		TopSkillGaps:                   topSkillGaps,
 		EmployeesWithoutRecommendation: withoutRecommendations,
 		ParticipationByEvent:           participation,
@@ -191,7 +196,7 @@ func employeeDTO(employee domain.Employee) domain.EmployeeProfileDTO {
 	return result
 }
 
-func activityDTOs(activities []domain.ActivityRecord) []domain.ActivityDTO {
+func activityDTOs(dataset domain.Dataset, activities []domain.ActivityRecord) []domain.ActivityDTO {
 	sorted := append([]domain.ActivityRecord(nil), activities...)
 	sort.SliceStable(sorted, func(i, j int) bool {
 		if sorted[i].Date.Equal(sorted[j].Date) {
@@ -201,10 +206,18 @@ func activityDTOs(activities []domain.ActivityRecord) []domain.ActivityDTO {
 	})
 	result := make([]domain.ActivityDTO, 0, len(sorted))
 	for _, activity := range sorted {
+		eventTitle := activity.EventID
+		eventFormat := ""
+		if event, exists := dataset.Events[activity.EventID]; exists {
+			eventTitle = event.Title
+			eventFormat = event.Format
+		}
 		item := domain.ActivityDTO{
 			RecordID:       activity.RecordID,
 			EmployeeID:     activity.EmployeeID,
 			EventID:        activity.EventID,
+			EventTitle:     eventTitle,
+			EventFormat:    eventFormat,
 			Date:           activity.Date.Format(time.DateOnly),
 			Status:         activity.Status,
 			CompletionPct:  activity.CompletionPct,

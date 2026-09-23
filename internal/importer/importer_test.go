@@ -27,6 +27,28 @@ func TestLoadDirLoadsValidDataset(t *testing.T) {
 	}
 }
 
+func TestLoadDirReadsOfficialEventFieldNames(t *testing.T) {
+	dir := writeDataset(t, "")
+	dataset, report, err := importer.LoadDir(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("LoadDir() error = %v, report = %#v", err, report)
+	}
+
+	event := dataset.Events["EV_001"]
+	if len(event.TargetRoles) != 1 || event.TargetRoles[0] != "Backend Engineer" {
+		t.Fatalf("target_roles = %#v", event.TargetRoles)
+	}
+	if len(event.TargetGrades) != 1 || event.TargetGrades[0] != "Junior" {
+		t.Fatalf("target_grades = %#v", event.TargetGrades)
+	}
+	if len(event.DevelopsSkills) != 1 || event.DevelopsSkills[0].SkillID != "SK_GO" || event.DevelopsSkills[0].MaxLevel != 3 {
+		t.Fatalf("develops_skills = %#v", event.DevelopsSkills)
+	}
+	if event.Prerequisites == nil || len(event.UpcomingSessions) != 0 {
+		t.Fatalf("prerequisites = %#v, upcoming_sessions = %#v", event.Prerequisites, event.UpcomingSessions)
+	}
+}
+
 func TestLoadDirRejectsUnknownEmployeeInActivityHistory(t *testing.T) {
 	dir := writeDataset(t, "R000001,E404,EV_001,2026-09-01,,completed,100,95,5,self\n")
 

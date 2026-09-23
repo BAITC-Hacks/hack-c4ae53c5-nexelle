@@ -1,0 +1,22 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      APP_PORT: "8080"
+      DATA_DIR: /app/data
+      SNAPSHOT_DATE: "2026-10-01"
+    volumes:
+      - ./data:/app/data:ro
+    ports:
+      - "8080:8080"
+
+  frontend:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"

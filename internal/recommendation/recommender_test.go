@@ -1,6 +1,7 @@
 package recommendation_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -61,6 +62,12 @@ func TestRecommendPrioritizesCriticalSystemDesignOverPublicSpeaking(t *testing.T
 	}
 	if recommendations[0].Explanation == "" {
 		t.Fatal("recommendation explanation must not be empty")
+	}
+	if !strings.Contains(recommendations[0].Explanations["ru"], "для Senior") {
+		t.Fatalf("Russian explanation = %q", recommendations[0].Explanations["ru"])
+	}
+	if !strings.Contains(recommendations[0].Explanations["kk"], "Senior үшін") {
+		t.Fatalf("Kazakh explanation = %q", recommendations[0].Explanations["kk"])
 	}
 }
 

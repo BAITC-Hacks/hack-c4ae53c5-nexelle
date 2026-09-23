@@ -53,6 +53,7 @@ func NewHandler(datasetStore store.DatasetStore, careerService CareerService) ht
 
 	mux.HandleFunc("GET /hr/dashboard", handler.hrAnalytics)
 	mux.HandleFunc("GET /api/hr/dashboard", handler.hrAnalytics)
+	mux.HandleFunc("GET /api/hr/analytics", handler.hrAnalytics)
 	mux.HandleFunc("GET /api/v1/hr/analytics", handler.hrAnalytics)
 	mux.HandleFunc("GET /api/v1/employees/{id}/profile", handler.employeeProfile)
 	mux.HandleFunc("POST /employees/{id}/complete", handler.completeEvent)

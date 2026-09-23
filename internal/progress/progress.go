@@ -49,7 +49,7 @@ func Calculate(dataset domain.Dataset, employee domain.Employee, activities []do
 	if err != nil {
 		return domain.CareerProgress{}, err
 	}
-	gaps := makeSkillGaps(targetProfile, effectiveSkills)
+	gaps := makeSkillGaps(dataset, targetProfile, effectiveSkills)
 	return domain.CareerProgress{
 		Target:           target,
 		EffectiveSkills:  effectiveSkills,
@@ -92,7 +92,7 @@ func nextGrade(grade string) string {
 	}
 }
 
-func makeSkillGaps(profile domain.RoleProfile, effectiveSkills map[string]int) []domain.SkillGap {
+func makeSkillGaps(dataset domain.Dataset, profile domain.RoleProfile, effectiveSkills map[string]int) []domain.SkillGap {
 	critical := make(map[string]bool, len(profile.CriticalSkills))
 	for _, skillID := range profile.CriticalSkills {
 		critical[skillID] = true
@@ -100,8 +100,13 @@ func makeSkillGaps(profile domain.RoleProfile, effectiveSkills map[string]int) [
 	gaps := make([]domain.SkillGap, 0, len(profile.RequiredSkills))
 	for skillID, requiredLevel := range profile.RequiredSkills {
 		currentLevel := effectiveSkills[skillID]
+		skillName := skillID
+		if skill, exists := dataset.Skills[skillID]; exists && skill.Name != "" {
+			skillName = skill.Name
+		}
 		gaps = append(gaps, domain.SkillGap{
 			SkillID:       skillID,
+			SkillName:     skillName,
 			CurrentLevel:  currentLevel,
 			RequiredLevel: requiredLevel,
 			Gap:           max(requiredLevel-currentLevel, 0),

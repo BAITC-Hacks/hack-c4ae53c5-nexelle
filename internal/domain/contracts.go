@@ -11,6 +11,7 @@ type CareerTarget struct {
 // SkillGap содержит объяснимый разрыв между эффективным уровнем навыка и требованием цели.
 type SkillGap struct {
 	SkillID       string `json:"skillId"`
+	SkillName     string `json:"skillName"`
 	CurrentLevel  int    `json:"currentLevel"`
 	RequiredLevel int    `json:"requiredLevel"`
 	Gap           int    `json:"gap"`
@@ -37,6 +38,7 @@ type ScoreBreakdown struct {
 // SkillEvidence объясняет, как мероприятие закрывает конкретный карьерный разрыв.
 type SkillEvidence struct {
 	SkillID       string `json:"skillId"`
+	SkillName     string `json:"skillName"`
 	CurrentLevel  int    `json:"currentLevel"`
 	RequiredLevel int    `json:"requiredLevel"`
 	Gain          int    `json:"gain"`
@@ -66,6 +68,7 @@ type Recommendation struct {
 	Score           ScoreBreakdown         `json:"score"`
 	Evidence        RecommendationEvidence `json:"evidence"`
 	Explanation     string                 `json:"explanation"`
+	Explanations    map[string]string      `json:"explanations"`
 }
 
 // EmployeeProfileDTO - camelCase-контракт профиля для фронтенда.
@@ -97,6 +100,8 @@ type ActivityDTO struct {
 	RecordID       string `json:"recordId"`
 	EmployeeID     string `json:"employeeId"`
 	EventID        string `json:"eventId"`
+	EventTitle     string `json:"eventTitle"`
+	EventFormat    string `json:"eventFormat"`
 	Date           string `json:"date"`
 	DueDate        string `json:"dueDate,omitempty"`
 	Status         string `json:"status"`
@@ -122,6 +127,7 @@ type CompletionResponse struct {
 // SkillGapSummary показывает, сколько сотрудников имеют ненулевой разрыв по навыку до своей цели.
 type SkillGapSummary struct {
 	SkillID       string `json:"skillId"`
+	SkillName     string `json:"skillName"`
 	EmployeeCount int    `json:"employeeCount"`
 }
 
@@ -145,6 +151,7 @@ type EventParticipation struct {
 
 // HRAnalytics - агрегированный контракт HR-экрана.
 type HRAnalytics struct {
+	EmployeeCount                  int                             `json:"employeeCount"`
 	TopSkillGaps                   []SkillGapSummary               `json:"topSkillGaps"`
 	EmployeesWithoutRecommendation []EmployeeWithoutRecommendation `json:"employeesWithoutRecommendation"`
 	ParticipationByEvent           []EventParticipation            `json:"participationByEvent"`

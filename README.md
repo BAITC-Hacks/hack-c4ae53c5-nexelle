@@ -1,23 +1,36 @@
 # Career Quest
 
-AI-зона проекта анализирует профиль сотрудника и историю активностей, считает пробелы в навыках и возвращает до трёх детерминированных рекомендаций с объяснением.
+Career Quest подбирает сотруднику объяснимые шаги развития по карьерной цели, навыкам и истории активностей. HR получает агрегаты по пробелам навыков и участию в мероприятиях.
 
-## Структура
+## Запуск
 
-- `backend/data_loader.py` — загрузка `data/employees.json`, `events.json`, `skills.json` и `activity_history.csv`.
-- `backend/recommendation_engine.py` — расчёт skill gaps и ранжирование событий.
-- `backend/ai_agent.py` — структурированное объяснение с детерминированным fallback без API key.
-- `backend/models.py` — модели результата на стандартной библиотеке Python.
-- `backend/test_backend.py` — smoke-тесты загрузки, ranking и fallback.
+Нужен Docker Desktop и каталог `data/` с `skills.json`, `employees.json`, `events.json` и `activity_history.csv`.
 
-## Запуск тестов
-
-```sh
-python -m unittest backend.test_backend -v
+```powershell
+docker compose up --build
 ```
 
-Реальные файлы dataset должны находиться в `data/`. Текущая ветка содержит только код загрузки и анализа: production dataset в рабочем дереве отсутствует, поэтому он не создаётся искусственно.
+- UI: <http://localhost:3000>
+- API: <http://localhost:8080>
+- дата среза: `2026-10-01`
 
-## Контракт результата
+UI обращается к API с demo-заголовками `X-Demo-Role` и `X-Employee-ID`. Роль сотрудника использует профиль `E0001`; переключатель HR запрашивает агрегированный срез.
 
-`RecommendationEngine(data).recommend(employee_id)` возвращает `RecommendationResponse` с employee id, текущим и целевым уровнем, `skill_gaps` и отсортированными рекомендациями. Одинаковые входные данные дают одинаковый порядок и score. Уже завершённые активности получают пониженный приоритет.
+## Проверка без Docker
+
+```powershell
+go test ./...
+go build ./...
+go vet ./...
+
+cd web
+corepack pnpm install --frozen-lockfile
+corepack pnpm build
+```
+
+## Ключевые API
+
+- `GET /api/employees/{id}` — профиль, эффективные навыки, разрывы и рекомендации;
+- `POST /api/employees/{id}/complete` — завершение мероприятия и пересчёт;
+- `GET /api/hr/analytics` — HR-аналитика;
+- `POST /api/import` — горячая загрузка и валидация датасета.

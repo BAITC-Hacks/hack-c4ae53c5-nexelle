@@ -87,7 +87,7 @@ func isEligible(
 }
 
 func buildCandidate(event domain.Event, input Input, gapsBySkill map[string]domain.SkillGap) candidate {
-	skills, gapScore, skillIDs := skillEvidence(event, gapsBySkill)
+	skills, gapScore, skillIDs := skillEvidence(event, input.Dataset, gapsBySkill)
 	history := historyForFormat(event.Format, input.Activities, input.Dataset.Events)
 	nextSessionDate := nextSession(event, input.CutoffDate)
 	goalMatchScore := 2.0
@@ -115,11 +115,12 @@ func buildCandidate(event domain.Event, input Input, gapsBySkill map[string]doma
 			History: history,
 		},
 	}
-	recommendation.Explanation = makeExplanation(recommendation, input.Progress.Target)
+	recommendation.Explanations = makeExplanations(recommendation, input.Progress.Target)
+	recommendation.Explanation = recommendation.Explanations["ru"]
 	return candidate{recommendation: recommendation, skillIDs: skillIDs}
 }
 
-func skillEvidence(event domain.Event, gapsBySkill map[string]domain.SkillGap) ([]domain.SkillEvidence, float64, map[string]struct{}) {
+func skillEvidence(event domain.Event, dataset domain.Dataset, gapsBySkill map[string]domain.SkillGap) ([]domain.SkillEvidence, float64, map[string]struct{}) {
 	result := make([]domain.SkillEvidence, 0, len(event.DevelopsSkills))
 	skillIDs := make(map[string]struct{})
 	gapScore := 0.0
@@ -133,8 +134,13 @@ func skillEvidence(event domain.Event, gapsBySkill map[string]domain.SkillGap) (
 			weight = 2.5
 		}
 		gapScore += float64(min(gain.Gain, gap.Gap)) * weight
+		skillName := gain.SkillID
+		if skill, exists := dataset.Skills[gain.SkillID]; exists && skill.Name != "" {
+			skillName = skill.Name
+		}
 		result = append(result, domain.SkillEvidence{
 			SkillID:       gain.SkillID,
+			SkillName:     skillName,
 			CurrentLevel:  gap.CurrentLevel,
 			RequiredLevel: gap.RequiredLevel,
 			Gain:          gain.Gain,
@@ -277,6 +283,43 @@ func hasNewSkill(skillIDs map[string]struct{}, usedSkills map[string]bool) bool 
 		}
 	}
 	return false
+}
+
+func makeExplanations(recommendation domain.Recommendation, target domain.CareerTarget) map[string]string {
+	ruFacts := make([]string, 0, 4)
+	kkFacts := make([]string, 0, 4)
+	if len(recommendation.Evidence.Skills) > 0 {
+		skill := recommendation.Evidence.Skills[0]
+		skillName := skill.SkillName
+		if skillName == "" {
+			skillName = skill.SkillID
+		}
+		ruFacts = append(ruFacts, fmt.Sprintf("%s: %d из %d для %s", skillName, skill.CurrentLevel, skill.RequiredLevel, target.Grade))
+		kkFacts = append(kkFacts, fmt.Sprintf("%s: %s үшін %d-ден %d", skillName, target.Grade, skill.RequiredLevel, skill.CurrentLevel))
+		if skill.IsCritical {
+			ruFacts = append(ruFacts, "навык критичен для цели")
+			kkFacts = append(kkFacts, "мақсат үшін маңызды дағды")
+		}
+	}
+	if recommendation.Evidence.History.CompletedCount > 0 {
+		ruFacts = append(ruFacts, "этот формат вы раньше завершали")
+		kkFacts = append(kkFacts, "бұл форматты бұрын сәтті аяқтағансыз")
+	}
+	if recommendation.NextSessionDate != "" {
+		ruFacts = append(ruFacts, "сессия доступна "+recommendation.NextSessionDate)
+		kkFacts = append(kkFacts, "сессия қолжетімді "+recommendation.NextSessionDate)
+	} else if recommendation.Format == "self_paced" {
+		ruFacts = append(ruFacts, "формат доступен сразу")
+		kkFacts = append(kkFacts, "формат бірден қолжетімді")
+	}
+	for len(ruFacts) < 3 {
+		ruFacts = append(ruFacts, "мероприятие соответствует карьерной цели")
+		kkFacts = append(kkFacts, "іс-шара мансаптық мақсатқа сәйкес")
+	}
+	return map[string]string{
+		"ru": strings.Join(ruFacts[:3], "; ") + ".",
+		"kk": strings.Join(kkFacts[:3], "; ") + ".",
+	}
 }
 
 func makeExplanation(recommendation domain.Recommendation, target domain.CareerTarget) string {
