@@ -259,12 +259,14 @@ func loadActivityHistory(ctx context.Context, dataset *domain.Dataset, path stri
 		return
 	}
 	index := makeHeaderIndex(headers)
+	missingRequiredColumn := false
 	for _, name := range requiredHistoryColumns {
 		if _, exists := index[name]; !exists {
 			report.add("activity_history.csv", 1, name, "required column is missing")
+			missingRequiredColumn = true
 		}
 	}
-	if len(report.Errors) != 0 {
+	if missingRequiredColumn {
 		return
 	}
 

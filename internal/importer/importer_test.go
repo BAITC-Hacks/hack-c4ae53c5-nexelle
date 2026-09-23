@@ -44,6 +44,33 @@ func TestLoadDirRejectsUnknownEmployeeInActivityHistory(t *testing.T) {
 	}
 }
 
+func TestLoadDirContinuesHistoryValidationAfterEarlierFileErrors(t *testing.T) {
+	dir := writeDataset(t, "R000001,E404,EV_001,2026-09-01,,completed,100,95,5,self\n")
+	writeFile(t, dir, "skills.json", `{
+  "proficiency_scale": {"0": "No knowledge"},
+  "skills": [],
+  "role_profiles": [{
+    "role": "Backend Engineer", "grade": "Junior", "required_skills": {"SK_GO": 1}, "critical_skills": ["SK_GO"]
+  }]
+}`)
+
+	_, report, err := importer.LoadDir(context.Background(), dir)
+	if err == nil {
+		t.Fatal("LoadDir() should fail validation")
+	}
+
+	foundHistoryIssue := false
+	for _, issue := range report.Errors {
+		if issue.File == "activity_history.csv" && issue.Field == "employee_id" {
+			foundHistoryIssue = true
+			break
+		}
+	}
+	if !foundHistoryIssue {
+		t.Fatalf("history issue was lost after earlier validation errors: %#v", report.Errors)
+	}
+}
+
 func writeDataset(t *testing.T, historyRows string) string {
 	t.Helper()
 	dir := t.TempDir()

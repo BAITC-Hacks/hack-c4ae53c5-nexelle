@@ -48,6 +48,21 @@ Invoke-WebRequest http://localhost:8080/api/v1/employees/E0001/profile -Headers 
 }
 ```
 
+В ответе профиля поля API используют `camelCase`: `assessedSkills`, `effectiveSkills`, `skillGaps`, `readinessPercent`, `recommendations` и `evidence`.
+
+Отметка добровольного мероприятия завершённым сохраняется в памяти на время сессии и сразу возвращает пересчитанный профиль:
+
+```powershell
+Invoke-WebRequest http://localhost:8080/api/v1/employees/E0001/complete -Method POST -Headers @{
+  'X-Demo-Role' = 'employee'
+  'X-Employee-ID' = 'E0001'
+} -ContentType 'application/json' -Body '{"eventId":"EV_005"}'
+```
+
+HR-агрегаты доступны по `GET /api/v1/hr/analytics` с заголовком `X-Demo-Role: hr`. Они включают топ пробелов навыков, сотрудников без доступной рекомендации и участие по мероприятиям.
+
+Для локального UI разрешены CORS origins `http://localhost:3000`, `http://localhost:5173` и `http://localhost:8080`.
+
 ## Проверка
 
 ```powershell
