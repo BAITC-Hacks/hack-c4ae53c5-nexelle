@@ -1,121 +1,128 @@
 # Frontend API contract
 
-## Purpose and transport boundary
+## Modes and service boundary
 
-The React UI imports only the functions exported from `web/src/services/api.js`. The active implementation is selected by `VITE_API_MODE`:
+The React UI calls only the functions exported by `web/src/services/api.js`.
+Components do not call `fetch` directly.
 
-- `mock` (default) uses `mockApi.js` and persists demo completion state in browser `localStorage`.
-- `real` uses `apiClient.js` and the proposed HTTP paths below.
+- `VITE_API_MODE=mock` is the default. It uses `mockApi.js` and retains the
+  standalone demo's browser `localStorage` persistence.
+- `VITE_API_MODE=real` uses the Go backend through `apiClient.js` and adapts
+  its DTOs into the UI DTOs below.
 
-The UI does not call `fetch` directly. In real mode, `VITE_API_BASE_URL` is required. The backend integration team may change the endpoint paths in `api.js` without changing pages or components.
+Real mode requires `VITE_API_BASE_URL=http://localhost:8080`. The current
+hackathon identity is `E0001`; it can be overridden with
+`VITE_DEMO_EMPLOYEE_ID` until an authenticated identity provider replaces it.
 
-## Service functions and proposed paths
+## Current mock contract
 
-| Frontend function | Method and path | Expected result |
+The mock API remains the UI contract for pages and components:
+
+| Function | Mock result |
+| --- | --- |
+| `getEmployeeProfile(employeeId)` | Employee DTO with `employee_id`, `name`, `career_goal`, `skills`, `progress`, and `history` |
+| `getEmployeeHistory(employeeId)` | Activity array with `activity_id`, `title`, `format`, `date`, and `status` |
+| `getRecommendations(employeeId)` | Recommendation array with `event_id`, `event_type`, score breakdown, eligibility, availability, evidence, and expected gains |
+| `completeActivity(employeeId, eventId)` | Marks the activity complete and updates in-memory/localStorage mock state |
+| `getHRDashboard()` | HR DTO with totals, skill gaps, and aggregated participation |
+
+Mock mode does not make HTTP requests. Completion state is stored under
+`career-quest.mock-api.v1` and therefore remains after a browser reload.
+
+## Actual Go backend contract
+
+The Go backend uses `http://localhost:8080` and demo authorization headers:
+
+- Employee requests: `X-Demo-Role: employee` and `X-Employee-ID: E0001`
+- HR requests: `X-Demo-Role: hr`
+
+The service layer sends those headers; pages and components do not manage them.
+
+| Frontend service function | Go endpoint used in real mode | Actual response |
 | --- | --- | --- |
-| `getEmployeeProfile(employeeId)` | `GET /employees/{employeeId}/profile` | Employee profile DTO |
-| `getEmployeeHistory(employeeId)` | `GET /employees/{employeeId}/history` | Array of activity history entries |
-| `getRecommendations(employeeId)` | `GET /employees/{employeeId}/recommendations` | Array of recommendation DTOs |
-| `completeActivity(employeeId, eventId)` | `POST /employees/{employeeId}/activities/{eventId}/complete` | Successful response; frontend then reloads profile, history, and recommendations |
-| `getHRDashboard()` | `GET /hr/dashboard` | HR dashboard DTO |
+| `getEmployeeProfile(employeeId)` | `GET /api/v1/employees/{id}/profile` | `ProfileResponse` |
+| `getEmployeeHistory(employeeId)` | `GET /employees/{id}/history` | Raw `ActivityRecord[]` |
+| `getRecommendations(employeeId)` | `GET /api/v1/employees/{id}/profile` | Extracts `ProfileResponse.recommendations` |
+| `completeActivity(employeeId, eventId)` | `POST /employees/{id}/complete` with `{"eventId":"..."}` | `CompletionResponse` |
+| `getHRDashboard()` | `GET /hr/dashboard` | `HRAnalytics` |
 
-`completeActivity` may return `204 No Content` or JSON. The frontend intentionally re-reads the affected data after a successful request, so it does not require a mutation response body.
+The backend enables CORS for the Vite development origin
+`http://localhost:5173` and permits these demo headers.
 
-## Employee profile DTO
+### Go profile and history DTOs
+
+`ProfileResponse` has these relevant fields:
 
 ```json
 {
-  "employee_id": "emp-003",
-  "name": "Айым Сейтова",
-  "role": "Product Analyst",
-  "grade": "G2 · Middle",
-  "career_goal": {
-    "target_role": "Senior Product Analyst",
-    "target_grade": "G3 · Senior",
-    "target_date": "Q4 2026"
+  "employee": {
+    "employeeId": "E0001",
+    "fullName": "...",
+    "role": "...",
+    "grade": "...",
+    "careerGoal": { "targetRole": "...", "targetGrade": "..." }
   },
-  "skills": [
-    {
-      "name": "SQL",
-      "current_level": 2,
-      "required_level": 4,
-      "gap": 2
-    }
-  ],
+  "activities": [{
+    "recordId": "...",
+    "eventId": "...",
+    "eventTitle": "...",
+    "eventFormat": "online",
+    "date": "2026-10-01",
+    "status": "completed"
+  }],
   "progress": {
-    "completed_activities": 3,
-    "total_activities": 7,
-    "percentage": 43
+    "target": { "role": "...", "grade": "...", "source": "careerGoal" },
+    "skillGaps": [{
+      "skillId": "...",
+      "skillName": "...",
+      "currentLevel": 2,
+      "requiredLevel": 4,
+      "gap": 2,
+      "isCritical": true
+    }],
+    "readinessPercent": 50
   },
-  "history": [
-    {
-      "activity_id": "hist-1",
-      "title": "Product Metrics Foundations",
-      "format": "Course",
-      "date": "18.08.2026",
-      "status": "completed"
-    }
-  ]
+  "recommendations": []
 }
 ```
 
-`history` is supported both inside the profile and through `getEmployeeHistory(employeeId)`. The UI uses the dedicated history response when it is available.
+The dedicated history endpoint returns raw activity records with snake-case
+fields such as `record_id`, `employee_id`, `event_id`, `date`, `status`, and
+`completion_pct`. It does not include event title or format.
 
-## Recommendation DTO
+### Go recommendation and HR DTOs
 
-```json
-{
-  "event_id": "event-sql-lab",
-  "title": "Advanced SQL: Window Functions Lab",
-  "event_type": "Workshop",
-  "availability": {
-    "date": "26.09.2026 · 15:00",
-    "status": "available"
-  },
-  "skill_gaps": ["SQL"],
-  "expected_gain": [{ "skill": "SQL", "level_delta": 1 }],
-  "prerequisites": ["Базовый SQL"],
-  "eligibility": { "status": "eligible" },
-  "history_signals": ["Продолжает тему SQL после базового курса"],
-  "score_breakdown": {
-    "grade": 24,
-    "skill_gaps": 30,
-    "career_goal": 22,
-    "activity_history": 12,
-    "availability": 12
-  },
-  "explanation": {
-    "why": "Практическая лаборатория закрывает самый большой skill gap.",
-    "evidence": [
-      { "factor": "skill_gaps", "detail": "SQL — разрыв 2 уровня из требуемых 4." }
-    ]
-  }
-}
-```
+Recommendations in the profile response use `eventId`, `title`, `format`,
+`nextSessionDate`, `score`, `evidence`, `explanation`, and localized
+`explanations`. The backend has already applied eligibility, prerequisites,
+availability, and recommendation scoring; the frontend does not calculate or
+rank recommendations.
 
-`event_type` is the contract field. `RecommendationCard` temporarily reads legacy `format` as a backwards-compatible fallback, but the mock DTO now uses `event_type`. `prerequisites` is top-level; the card also accepts the former nested mock shape as a temporary fallback.
+`HRAnalytics` uses `employeeCount`, `topSkillGaps`,
+`employeesWithoutRecommendation`, and `participationByEvent`. Each
+participation item includes `completed`, `noShow`, `dropped`, and `declined`.
 
-## HR dashboard DTO
+## Frontend adapter behavior
 
-```json
-{
-  "total_employees": 128,
-  "employees_in_development": 83,
-  "employees_without_recommendation": 14,
-  "skill_gaps": [
-    { "skill": "SQL", "employees": 36 }
-  ],
-  "activity_participation": {
-    "completed": 67,
-    "no_show": 8,
-    "dropped": 11,
-    "declined": 19
-  }
-}
-```
+`api.js` maps real responses into the existing page/component DTOs:
 
-## Current mock differences
+- Employee `fullName`, camel-case career goal, `skillGaps`, and
+  `readinessPercent` become the existing employee, skills, and progress
+  fields. `completed_activities` and `total_activities` are derived from
+  profile activities.
+- Raw history records become `activity_id`, `title`, `format`, `date`, and
+  `status`. The concurrently loaded profile supplies event title/format
+  metadata. Backend formats map to existing UI labels as `self_paced` →
+  `Course`, `online` → `Workshop`, and other formats → `Event`.
+- `getRecommendations()` extracts the server-provided profile
+  recommendations. It maps server scores and evidence without creating a
+  frontend recommendation algorithm. The Go DTO has no displayable
+  prerequisite list, so the adapter exposes an empty `prerequisites` array.
+- HR skill-gap and per-event participation arrays are aggregated into the
+  current dashboard DTO.
+- Completion only posts the backend's required body. `App.jsx` retains its
+  existing post-completion refetch of profile, history, and recommendations.
 
-- Mock persistence (`completed` on an internal recommendation record and browser `localStorage`) is demo-only and is not part of the backend DTO.
-- `date: "today"` is a mock sentinel used by the UI to localize an activity completed in the current session. A real API should return a display-ready date or an agreed machine-readable date format.
-- No authentication, authorization, pagination, filtering, or error-envelope contract is defined yet. These need alignment before production integration.
+`apiClient.js` continues to throw `ApiClientError`; it now also reads the Go
+error envelope at `error.message`, so existing UI load-error handling remains
+unchanged.

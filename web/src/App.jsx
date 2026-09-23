@@ -5,9 +5,7 @@ import { createTranslator } from './i18n/translations'
 import EmployeeDashboard from './pages/EmployeeDashboard'
 import CareerPath from './pages/CareerPath'
 import HRDashboard from './pages/HRDashboard'
-import { completeActivity, getEmployeeHistory, getEmployeeProfile, getHRDashboard, getRecommendations } from './services/api'
-
-const demoEmployeeId = 'emp-003'
+import { completeActivity, demoEmployeeId, getEmployeeHistory, getEmployeeProfile, getHRDashboard, getRecommendations } from './services/api'
 
 function LoadingState() {
   return <div className="loading-state"><span className="loading-orb" /><p>Career Quest</p></div>

@@ -30,7 +30,7 @@ export async function requestJson(path, options = {}) {
 
   const payload = await response.json().catch(() => null)
   if (!response.ok) {
-    throw new ApiClientError(payload?.message ?? `Request failed with status ${response.status}`, response.status)
+    throw new ApiClientError(payload?.error?.message ?? payload?.message ?? `Request failed with status ${response.status}`, response.status)
   }
 
   return payload
