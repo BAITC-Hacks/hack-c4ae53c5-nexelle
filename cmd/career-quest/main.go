@@ -8,6 +8,7 @@ import (
 
 	"github.com/BAITC-Hacks/hack-c4ae53c5-nexelle/internal/config"
 	"github.com/BAITC-Hacks/hack-c4ae53c5-nexelle/internal/importer"
+	"github.com/BAITC-Hacks/hack-c4ae53c5-nexelle/internal/service"
 	"github.com/BAITC-Hacks/hack-c4ae53c5-nexelle/internal/store"
 	"github.com/BAITC-Hacks/hack-c4ae53c5-nexelle/internal/transport/httpapi"
 )
@@ -32,10 +33,14 @@ func main() {
 	if err := memoryStore.ReplaceDataset(context.Background(), dataset); err != nil {
 		log.Fatalf("store dataset: %v", err)
 	}
+	careerService, err := service.NewCareerService(memoryStore, cfg.SnapshotDate)
+	if err != nil {
+		log.Fatalf("create career service: %v", err)
+	}
 
 	server := &http.Server{
 		Addr:              cfg.Address(),
-		Handler:           httpapi.NewHandler(memoryStore),
+		Handler:           httpapi.NewHandler(memoryStore, careerService),
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 	}
 
