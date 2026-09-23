@@ -1,0 +1,38 @@
+# Binaries & build artifacts
+bin/
+dist/
+out/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go workspace & modules
+vendor/
+
+# Environment files & secrets
+.env
+.env.*
+!.env.example
+
+# IDE & Editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Operating System files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# AI Assistant & Agent local rules (исключены из репозитория хакатона)
+AGENTS.md
+GEMINI.md
+.agents/
+.gemini/
+.antigravity/
